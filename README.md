@@ -7,6 +7,7 @@
 | Skill | Description |
 |-------|-------------|
 | [use-inlets-cloud](skills/use-inlets-cloud/) | Creates and manages inlets cloud tunnels (HTTP and ingress) using the `inlets-pro cloud` CLI. |
+| [use-inletsctl](skills/use-inletsctl/) | Creates and manages inlets tunnel exit-servers on cloud VMs using `inletsctl`. |
 
 ## Installation
 
@@ -20,13 +21,13 @@ This installs the skill into whichever AI coding agents you have (Claude Code, A
 
 ### Manual
 
-Clone and copy the skill into your agent's skills directory:
+Clone and copy the skills into your agent's skills directory:
 
 ```bash
 git clone https://github.com/inlets/agent-skills.git
-cp -r agent-skills/skills/use-inlets-cloud .claude/skills/   # Claude Code
-cp -r agent-skills/skills/use-inlets-cloud .agents/skills/    # Amp / Codex
-cp -r agent-skills/skills/use-inlets-cloud .cursor/skills/    # Cursor
+cp -r agent-skills/skills/* .claude/skills/   # Claude Code
+cp -r agent-skills/skills/* .agents/skills/    # Amp / Codex
+cp -r agent-skills/skills/* .cursor/skills/    # Cursor
 ```
 
 ## License
