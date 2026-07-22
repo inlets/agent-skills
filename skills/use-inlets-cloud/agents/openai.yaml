@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Inlets Cloud"
+  short_description: "Create secure hosted HTTP and ingress tunnels"
+  default_prompt: "Use $use-inlets-cloud to expose my local service through an Inlets Cloud tunnel."
