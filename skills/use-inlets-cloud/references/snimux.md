@@ -2,9 +2,23 @@
 
 Use this workflow to expose several private SSH servers and K3s API servers through a single Inlets Cloud ingress tunnel. `snimux` wraps SSH in TLS so a hostname can be carried as SNI; K3s already speaks TLS, so its connection uses passthrough mode.
 
+## Mandatory invariants
+
+Follow this as a fixed ingress workflow, not as an architecture to rediscover:
+
+- Use an Inlets Cloud **ingress** tunnel and a **verified custom domain**.
+- Never use an HTTP tunnel or a generated `tryinlets.dev` domain for snimux.
+- Map public port `443` to the private snimux listener at `127.0.0.1:8443` when Uplink and snimux are colocated.
+- Do not insert HTTP, stunnel, nginx, TLS termination, or another protocol bridge.
+- Do not bind snimux to all interfaces when the Uplink client runs on the same host.
+- Stop and ask the user to register or select a domain when no verified custom domain is available. Do not create an HTTP tunnel as a fallback.
+
+Keep the public edge, SNI route names, snimux listener, and backend endpoints distinct. Derive each address from the selected topology rather than substituting one for another.
+
 ## Contents
 
 - [Plan names and endpoints](#plan-names-and-endpoints)
+- [Plan the topology](#plan-the-topology)
 - [Create the Cloud ingress tunnel](#create-the-cloud-ingress-tunnel)
 - [Configure snimux upstreams](#configure-snimux-upstreams)
 - [Connect the Cloud tunnel](#connect-the-cloud-tunnel)
@@ -20,16 +34,46 @@ Collect these values before changing anything:
 
 | Placeholder | Meaning | Example |
 |---|---|---|
-| `SSH_DOMAIN` | Verified apex domain | `example.com` |
-| `SSH_HOSTS` | Public names used as SNI routes | `nuc.example.com`, `nas.example.com` |
-| `K3S_HOST` | Optional public/SNI name for Kubernetes | `k3s.example.com` |
+| `VERIFIED_APEX` | Apex domain registered and verified with Inlets Cloud | `example.com` |
+| `ROUTE_NAMES` | Verified custom hostnames used as SNI route keys | `nuc.example.com`, `k3s.example.com` |
 | `CLOUD_EDGE` | Public Inlets Cloud data-plane hostname from the tunnel details/connect output | `cambs1.uplink.inlets.dev` |
 | `CLOUD_PORT` | Public ingress data-plane port | `443` |
-| `SNIMUX_ADDR` | Private listener reached by the Uplink client | `127.0.0.1:8443` |
+| `UPLINK_HOST` | Private host or environment running the Uplink client | gateway VM or Kubernetes workload |
+| `SNIMUX_HOST` | Private host or environment running the snimux server | same gateway or another trusted host |
+| `SNIMUX_LISTENER` | Listener reachable from `UPLINK_HOST` | `127.0.0.1:8443` or `10.0.0.8:8443` |
+| `BACKENDS` | Private SSH or TLS endpoints reachable from `SNIMUX_HOST` | `127.0.0.1:22`, `10.0.0.20:22`, `10.0.0.30:6443` |
 
 Do not guess `CLOUD_EDGE`; take it from the created tunnel's connection details. Ensure every hostname is attached to the same ingress tunnel and has the DNS record instructed by Inlets Cloud. The public hostname is also the snimux route key, so spelling must match across Cloud, DNS, `snimux.yaml`, SSH config, and kubeconfig.
 
 Harden every SSH server before exposure: disable root and password login, require keys, keep host keys verified, and expose only intended hosts. Prefer Cloud ACLs and snimux per-upstream `allow` lists where client source addresses are stable.
+
+Before provisioning, inspect available domains and tunnels:
+
+```bash
+inlets-pro cloud domain list
+inlets-pro cloud tunnel list --verbose
+```
+
+Select an already verified apex and a custom hostname beneath it. Reuse an existing tunnel only when the user authorized it and adding the route will not disrupt its current users. If no verified apex is available, stop and ask the user to complete domain registration and DNS verification.
+
+## Plan the topology
+
+Resolve placement and reachability before constructing commands:
+
+1. Decide where the Uplink client and snimux server will run. They are separate long-running processes and may be colocated or split across trusted private hosts.
+2. Choose the snimux listener from the Uplink client's point of view. Use loopback when both processes are colocated. When they are split, use a private address reachable only across a restricted network and bind snimux accordingly.
+3. For each route, choose one verified custom hostname and one backend reachable from the snimux host. Use the hostname as the exact `name` in `snimux.yaml`.
+4. Classify each backend protocol. Leave SSH routes in the default wrapping mode; set `passthrough: true` for TLS services such as K3s that must retain their original TLS session.
+5. Create or extend one ingress tunnel with the required route domains. Map public port 443 to `SNIMUX_LISTENER` in the Uplink command.
+6. Start and verify snimux first, then Uplink, then test each route with its native client. Return the corresponding connection configuration or command to the user.
+
+Maintain these relationships for every topology:
+
+- `ROUTE_NAME` must match the Cloud domain, DNS name, `snimux.yaml` route name, and client SNI or destination name.
+- `CLOUD_EDGE:CLOUD_PORT` is the public destination; it is not a route name or a backend address.
+- The Uplink mapping is `443=SNIMUX_LISTENER`; it does not point directly to an SSH or K3s backend.
+- Each `upstream` in `snimux.yaml` is a backend address reachable from `SNIMUX_HOST`; it is not the Cloud edge or Uplink control URL.
+- Verify the complete chain for every route before claiming success. If a hop fails, use the bounded checks in [Troubleshoot and remove](#troubleshoot-and-remove) without changing the architecture speculatively.
 
 ## Create the Cloud ingress tunnel
 
@@ -98,10 +142,10 @@ Ask the Cloud CLI to print the ingress client command:
 
 ```bash
 inlets-pro cloud tunnel connect remote-access \
-  --upstream 443=127.0.0.1:8443
+  --upstream 443=SNIMUX_LISTENER
 ```
 
-Run the resulting `inlets-pro uplink client` on the same private host as snimux. Preserve the generated `--url` and tunnel token, but ensure the upstream mapping is public port 443 to private snimux port 8443:
+Run the resulting `inlets-pro uplink client` on `UPLINK_HOST`. Preserve the generated `--url` and tunnel token, but ensure the upstream mapping sends public port 443 to the selected private snimux listener. For a colocated deployment this commonly becomes:
 
 ```bash
 inlets-pro uplink client \
@@ -110,7 +154,9 @@ inlets-pro uplink client \
   --upstream 443=127.0.0.1:8443
 ```
 
-The Cloud Uplink client and snimux server are separate long-running processes; both must be healthy. Keep the tunnel token out of shell history and set its file mode to `0600`.
+For a split deployment, replace the loopback target with the restricted private address of `SNIMUX_HOST` and configure the snimux bind address to match. Confirm reachability from `UPLINK_HOST` without exposing the listener publicly.
+
+The Cloud Uplink client and snimux server are separate long-running processes; both must be healthy. Keep the tunnel token out of shell history and set its file mode to `0600`. Do not reproduce an inline token in narrative output, logs, or saved transcripts; transfer it directly into the protected token file when possible.
 
 ## Update local SSH configuration
 
@@ -339,15 +385,28 @@ Use `/Library/LaunchDaemons` and the `system` launchctl domain only when the ser
 
 ## Troubleshoot and remove
 
-Check the path one hop at a time:
+Use this bounded sequence. Preserve the prescribed ingress architecture while diagnosing it; do not create an HTTP tunnel, add a protocol bridge, or change ports speculatively.
 
-1. Confirm each private backend is reachable from the snimux host (`nc -vz HOST PORT`).
-2. Confirm snimux listens on loopback port 8443.
-3. Confirm the Uplink client reports a connection and maps `443=127.0.0.1:8443`.
-4. Confirm Cloud lists the tunnel as connected and every domain is attached.
-5. Confirm public DNS resolves to the target instructed by Cloud.
-6. For SSH, inspect `ssh -G` and run `ssh -vvv HOST`.
-7. For K3s, verify the certificate SAN, `passthrough: true`, kubeconfig `server`, and `tls-server-name` all use the same hostname.
+1. Confirm each private backend is reachable from the snimux host: `nc -vz HOST PORT`.
+2. Confirm snimux is running and listens on the planned `SNIMUX_LISTENER`: `ss -ltnp | grep ':8443'` for the default port.
+3. From `UPLINK_HOST`, confirm `SNIMUX_LISTENER` is reachable and the Uplink logs show the planned `443=SNIMUX_LISTENER` mapping.
+4. Confirm Cloud reports one connected client on the intended **ingress** tunnel and the custom route domain is attached.
+5. Confirm public DNS resolves to the exact target instructed by Cloud.
+6. Confirm the `name` in `snimux.yaml`, the custom Cloud domain, and the SSH destination hostname are character-for-character identical.
+7. On the operator host, inspect the effective SSH configuration with `ssh -G SSH_ROUTE_NAME`.
+8. Attempt one non-interactive connection with bounded timeouts:
+
+   ```bash
+   ssh \
+     -o BatchMode=yes \
+     -o ConnectTimeout=10 \
+     -o 'ProxyCommand=/absolute/path/to/inlets-pro snimux connect CLOUD_EDGE:443 %h' \
+     operator@nuc.example.com \
+     hostname
+   ```
+
+9. If it fails, repeat once with `-vvv` and collect the snimux and Uplink logs. Report the failing hop and evidence instead of repeatedly recreating tunnels or processes.
+10. For K3s, verify the certificate SAN, `passthrough: true`, kubeconfig `server`, and `tls-server-name` all use the same hostname.
 
 Common failures:
 
@@ -355,6 +414,8 @@ Common failures:
 - SSH host-key warning: stop and verify the backend fingerprint; never suppress `StrictHostKeyChecking` globally.
 - TLS hostname error from kubectl: K3s lacks the chosen `--tls-san`, or kubeconfig `tls-server-name` differs.
 - Immediate timeout: wrong `CLOUD_EDGE`, port 443 blocked, Cloud tunnel disconnected, or `dial_timeout` too short. Set `dial_timeout=5s` for `snimux connect` only when latency justifies it.
+- HTTP response, WebSocket error, or TLS termination mismatch: the wrong tunnel type was selected. Delete only the mistaken test tunnel after confirming its exact identity, then use an ingress tunnel with a verified custom domain; do not bridge HTTP to snimux.
+- Port 8443 already in use: inspect the owning process and existing snimux service before stopping anything. Do not switch to a random port unless the ingress mapping and service configuration are intentionally changed together.
 - ACL denies all clients: Proxy Protocol is missing/mismatched or the observed public source address is not allowed.
 
 Removing one SSH host does not require deleting the tunnel: remove it from local SSH config, remove/restart the snimux route, detach the Cloud tunnel domain, and remove DNS after confirming no other user depends on it. Remove K3s access similarly, but leave its certificate SAN unless there is a concrete reason to rotate certificates.
