@@ -7,6 +7,7 @@
 | Skill | Description |
 |-------|-------------|
 | [use-inlets-cloud](skills/use-inlets-cloud/) | Creates and secures hosted HTTP and ingress tunnels with generated or custom domains using the `inlets-pro cloud` CLI. |
+| [use-inlets-pro](skills/use-inlets-pro/) | Configures and secures standalone Inlets Pro TCP and automated HTTPS tunnels, including authentication and DNS setup. |
 | [use-inletsctl](skills/use-inletsctl/) | Creates and manages inlets tunnel exit-servers on cloud VMs using `inletsctl`. |
 
 ## Installation
