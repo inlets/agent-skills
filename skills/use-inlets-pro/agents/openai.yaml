@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Inlets Pro"
+  short_description: "Run secure HTTP and TCP tunnels"
+  default_prompt: "Use $use-inlets-pro to configure a secure tunnel for my service."
