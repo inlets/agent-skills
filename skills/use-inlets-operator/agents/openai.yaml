@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use inlets-operator"
+  short_description: "Manage Kubernetes LoadBalancer tunnels"
+  default_prompt: "Use $use-inlets-operator to expose and manage this Kubernetes LoadBalancer service."
