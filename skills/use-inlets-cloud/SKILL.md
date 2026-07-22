@@ -169,6 +169,15 @@ Use `snimux` to route several SSH hosts and K3s APIs through one Inlets Cloud in
 - running both required processes with systemd or macOS launchd;
 - checking logs and disabling, unloading, or removing each service.
 
+Apply these rules before creating or changing anything:
+
+- **Use only an ingress tunnel with a verified custom domain.** An HTTP tunnel and a generated `tryinlets.dev` domain cannot carry snimux traffic. Never create either as a snimux experiment or fallback.
+- Run `inlets-pro cloud domain list` and `inlets-pro cloud tunnel list --verbose` first. Reuse a verified domain or suitable ingress tunnel only when the user authorized it. If no verified custom domain is available, stop and ask the user to register or select one.
+- Map public ingress port `443` to the private snimux listener, normally `127.0.0.1:8443`. When Uplink and snimux run on the same host, keep this listener on loopback; do not add `--data-addr '0.0.0.0:'`.
+- Treat snimux and Uplink as two separate long-running processes. Start and verify both on the private host; do not run either on the operator's workstation unless that placement was requested.
+- Do not introduce HTTP upstream URLs, stunnel, nginx, TLS termination, WebSocket bridges, or alternate ports to repair this workflow. Diagnose the prescribed raw port mapping instead.
+- Do not claim success until an actual SSH or K3s request succeeds. For SSH, finish by giving the user an exact `ssh` command containing the snimux `ProxyCommand`.
+
 Use `inlets-pro snimux server` and `inlets-pro snimux connect`. Inspect `inlets-pro snimux --help` before acting.
 
 ## Generate persistent clients
