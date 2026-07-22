@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Inlets Uplink"
+  short_description: "Create and manage multi-service Uplink tunnels"
+  default_prompt: "Use $use-inlets-uplink to create and connect an Inlets Uplink tunnel."
