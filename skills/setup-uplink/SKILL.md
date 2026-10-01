@@ -16,12 +16,14 @@ Inspect the kube context, existing Helm releases, ingress classes/controllers, c
 Resolve these choices from the request and cluster; ask only for missing information that affects deployment:
 
 - Target cluster/context, release namespace, and a local file containing an Uplink license. A standalone Inlets Pro license does not work. The license key must be uppercase; normalize a protected copy if needed without printing its contents.
-- The client connection hostname, its DNS provider, and how the ingress obtains an externally reachable address. Check ports 80 for HTTP01 and 443 for HTTPS/WebSockets. Existing bare-metal/K3s clusters need a working exposure mechanism; a pending LoadBalancer is not a usable endpoint.
+- The client connection hostname, its DNS provider, and how the ingress is reachable from the intended client network. Public HTTP01 requires Internet reachability on port 80; HTTPS/WebSockets require a reachable TLS listener, normally port 443. Existing bare-metal/K3s clusters need a working exposure mechanism; a private LoadBalancer IP or a pending LoadBalancer does not establish public reachability.
 - Existing ingress choice, issuer, and ACME contact email. Recommend Traefik for a new ingress setup; use Istio when selected or already adopted by the team.
 - Whether application traffic stays private, selected HTTP services become public, or many HTTP services need wildcard routing. If unspecified, explain the private default before adding any public application routes.
 - Tenant namespace layout, optional namespace restriction via `tunnelsNamespace`, and an upstream service reachable from the machine where the client will run.
 
 The client-router must be reachable by tunnel clients even when the tunneled applications are private. Public client connections do not imply public application access.
+
+When public ingress is unavailable, especially on a local Slicer VM or a cluster behind NAT, explicitly present both a **self-signed issuer for quick local testing/evaluation only** and a **public IP via `use-inlets-operator`**. Do this before attempting public HTTP01 issuance, unless the user has already selected a path. Also consider DNS01 with a user-controlled domain when clients already have a private network route. Read [references/private-cluster-evaluation.md](references/private-cluster-evaluation.md) for the choices, certificate trust setup, and operator skill link. A self-signed certificate or DNS01 solves certificate issuance, not network reachability; the local evaluation option is not a production setup.
 
 | Choice | Application access | Additional setup |
 |---|---|---|
@@ -89,7 +91,7 @@ kubectl rollout status deployment/client-router -n inlets --timeout=180s
 kubectl get certificates,issuers -n inlets
 ```
 
-For Kubernetes Ingress inspect `ingress/client-router` and wait for `certificate/client-router-cert` to be Ready. For Istio inspect its Gateway/VirtualService and the certificate in the gateway workload namespace (normally `istio-system`). Check DNS and trusted TLS from the client network; do not use disabled certificate verification as a success criterion.
+For Kubernetes Ingress inspect `ingress/client-router` and wait for `certificate/client-router-cert` to be Ready. For Istio inspect its Gateway/VirtualService and the certificate in the gateway workload namespace (normally `istio-system`). Check DNS and trusted TLS from the client network; for self-signed evaluations use the explicit certificate trust described in the evaluation reference. Do not use disabled certificate verification as a success criterion.
 
 The chart enables `clientApi` by default. Kubernetes Ingress normally routes `/v1` on the client-router hostname to `client-api:8080`. Verify this route explicitly for Istio; see the ingress reference. Helm generates the `client-api-token` Secret, key `client-api-token`, unless an existing/configured token is used. Retrieve it only into a protected local file when needed. This management token is separate from tunnel connection tokens and application authentication.
 

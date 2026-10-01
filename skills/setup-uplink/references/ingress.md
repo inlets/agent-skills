@@ -2,6 +2,8 @@
 
 Source: [Uplink installation](https://docs.inlets.dev/uplink/installation/). The examples below were checked against OCI chart `inlets-uplink-provider` version `0.6.4`; inspect the selected version again during deployment.
 
+If the cluster has no public ingress route, first follow [private cluster evaluation](private-cluster-evaluation.md). The ACME examples below assume public HTTP01 reachability; the evaluation reference supplies a self-signed alternative and a public-IP option using the inlets operator.
+
 ## Kubernetes Ingress: Traefik or an existing controller
 
 Reuse an existing controller when suitable. For a new Traefik installation:
@@ -12,7 +14,7 @@ helm repo update traefik
 helm install traefik traefik/traefik --namespace traefik --create-namespace
 ```
 
-Wait for a reachable LoadBalancer address and configure the client-router hostname's A/AAAA or CNAME record accordingly. Publish AAAA only when IPv6 actually reaches the ingress. Ensure external TCP 80 reaches the HTTP01 solver and 443 reaches the TLS/WebSocket listener.
+For public ingress, wait for a publicly reachable LoadBalancer address and configure the client-router hostname's A/AAAA or CNAME record accordingly. Publish AAAA only when IPv6 actually reaches the ingress. Ensure external TCP 80 reaches the HTTP01 solver and 443 reaches the TLS/WebSocket listener. For a private evaluation, use the selected private route or local port-forward and its matching hostname instead.
 
 Use this as the Kubernetes Ingress base for `values.yaml`:
 
