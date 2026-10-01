@@ -99,7 +99,7 @@ inlets-pro uplink client \
 
 Preserve the securely derived URL and chosen upstream mappings; `--tls-ca` is optional for certificates already trusted by the client's normal trust store. It verifies the Uplink server connection, not TLS at an HTTPS upstream, and it does not replace the tunnel token. The URL hostname must resolve from the client and match the certificate's DNS names. Obtain the certificate over a trusted administrative channel; never transfer its private key or fetch trust blindly from an unauthenticated endpoint.
 
-For a directly self-signed certificate, trust the administrator-provided server certificate; for private PKI, use its CA bundle. Do not disable verification to bypass an unknown-authority error. If the runtime lacks `--tls-ca`, use a compatible version that supports it. For systemd or Kubernetes clients, retain the flag and provision the PEM at a durable, readable path (a read-only mount for a Pod). A reissued self-signed certificate may require updating that file. Keep temporary self-signed evaluations distinct from production PKI.
+For a directly self-signed certificate, trust the administrator-provided server certificate; for private PKI, use its CA bundle. Do not disable verification to bypass an unknown-authority error. If the runtime lacks `--tls-ca`, use a compatible version that supports it. For systemd or Kubernetes clients, retain the flag and provision the PEM at a durable, readable path (a read-only mount for a Pod). A reissued self-signed certificate may require updating that file. Keep local self-signed evaluations distinct from production PKI.
 
 ### Check the tunnel and data path
 
