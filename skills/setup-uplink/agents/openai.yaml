@@ -1,0 +1,4 @@
+interface:
+  display_name: "Set Up Inlets Uplink"
+  short_description: "Install Uplink with private or public tunnels"
+  default_prompt: "Use $setup-uplink to install Inlets Uplink on my Kubernetes cluster and help me choose ingress and tunnel visibility."

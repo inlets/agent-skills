@@ -6,6 +6,7 @@
 
 | Skill | Description |
 |-------|-------------|
+| [setup-uplink](skills/setup-uplink/) | Installs Inlets Uplink on Kubernetes with Traefik, other ingress controllers, or Istio, supporting private tunnels and optional public HTTPS exposure. |
 | [use-inlets-cloud](skills/use-inlets-cloud/) | Creates and secures hosted HTTP and ingress tunnels with generated or custom domains using the `inlets-pro cloud` CLI. |
 | [use-inlets-operator](skills/use-inlets-operator/) | Installs and operates inlets-operator lifecycle management for Kubernetes LoadBalancer Services and cloud tunnel infrastructure. |
 | [use-inlets-pro](skills/use-inlets-pro/) | Configures and secures standalone Inlets Pro TCP and automated HTTPS tunnels, including authentication and DNS setup. |
