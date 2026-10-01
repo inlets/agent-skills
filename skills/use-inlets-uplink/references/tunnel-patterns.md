@@ -12,6 +12,8 @@ For HTTP routing, `upstreamDomains` contains short names. Uplink creates a Kuber
 
 Before running a client, follow the secure connection workflow in [../SKILL.md](../SKILL.md) to set `$UPLINK_URL` and `$TOKEN_FILE` without displaying generated connection output or credentials. Execute preparation, client launch, verification, and cleanup in one shell invocation so temporary variables and traps remain active. Do not copy a URL path from these examples; router paths vary by deployment.
 
+The client examples below use the default trust store. For a self-signed/private Uplink server certificate, add `--tls-ca "$UPLINK_CA_FILE"` to each runtime client invocation after preparing the public trust bundle as described in [the TLS guidance](../SKILL.md#optional-trust-for-self-signed-or-private-certificates).
+
 ## Single TCP upstream
 
 ```yaml
@@ -153,6 +155,18 @@ inlets-pro uplink client \
   --upstream "grafana.${TUNNEL_NS}=http://grafana.monitoring:3000" \
   --upstream "gateway.${TUNNEL_NS}=http://gateway.openfaas:8080"
 ```
+
+## Public HTTP hostnames
+
+Configure public ingress infrastructure through `setup-uplink` first. For wildcard data-router routing, register each selected full hostname in `spec.ingressDomains`, preserving the rest of the Tunnel spec:
+
+```yaml
+spec:
+  ingressDomains:
+    - app.apps.example.com
+```
+
+Use `--upstream app.apps.example.com=http://127.0.0.1:8080` on the client for that HTTP target. Generate the connection URL with the control-plane hostname, not this public application hostname. The registered domain, requested Host, and upstream mapping must agree. A wildcard DNS record alone does not register a tunnel. Keep private tunnels unregistered. For per-tunnel ingress, give `setup-uplink` the observed Service namespace/name/port and chosen hostname; then verify an HTTPS request through that route.
 
 ## Stable token reference
 

@@ -1,11 +1,11 @@
 ---
 name: setup-uplink
-description: Installs, configures, verifies, and upgrades self-hosted Inlets Uplink on an existing Kubernetes cluster using its Helm chart. Use for Uplink licensing, Traefik or other Kubernetes ingress controllers, Istio, TLS and DNS, tenant namespaces, and private tunnels or optional public per-tunnel and wildcard HTTPS exposure.
+description: Installs, configures, verifies, and upgrades the self-hosted Inlets Uplink control plane on an existing Kubernetes cluster using its Helm chart. Use for Uplink licensing, Traefik or other ingress controllers, Istio, TLS and DNS, and private or public tunnel ingress infrastructure. Hand off tunnel creation and client deployment to use-inlets-uplink.
 ---
 
 # Set Up Inlets Uplink
 
-Install the Uplink management components in the user's existing cluster, then verify a connected tunnel with the selected visibility. This is the self-hosted Uplink product, distinct from hosted Inlets Cloud and standalone Inlets Pro servers.
+Install the Uplink management components in the user's existing cluster and verify the control plane, TLS, and management API. Use `use-inlets-uplink` for tunnel creation, client deployment, and any end-to-end tunnel test. This is the self-hosted Uplink product, distinct from hosted Inlets Cloud and standalone Inlets Pro servers.
 
 Start with the current [installation documentation](https://docs.inlets.dev/uplink/installation/). Inspect the selected chart's values and rendered manifests when examples differ from the chart. Examples here use release `inlets-uplink`, namespace `inlets`, tenant namespace `tunnels`, and illustrative domains; adapt them consistently.
 
@@ -13,17 +13,19 @@ Start with the current [installation documentation](https://docs.inlets.dev/upli
 
 Inspect the kube context, existing Helm releases, ingress classes/controllers, cert-manager, namespaces, and LoadBalancer addresses. Reuse working infrastructure and respect any GitOps ownership. Do not install another ingress controller or replace an issuer merely because an example uses a different one.
 
+Use the user's credential source or existing secret-management workflow. For discovery, inspect an existing installation's Secret metadata or the conventional `~/.inlets/LICENSE_UPLINK` file location without displaying secret values. If unavailable, ask for a protected file path or secret reference; never invite a license/token paste or search entire home/VM filesystems.
+
 Resolve these choices from the request and cluster; ask only for missing information that affects deployment:
 
-- Target cluster/context, release namespace, and a local file containing an Uplink license. A standalone Inlets Pro license does not work. The license key must be uppercase; normalize a protected copy if needed without printing its contents.
+- Target cluster/context, release namespace, and an Uplink license supplied through a protected file or existing secret-management workflow. A standalone Inlets Pro license does not work. The license key must be uppercase; normalize a protected copy if needed without printing its contents.
 - The client connection hostname, its DNS provider, and how the ingress is reachable from the intended client network. Public HTTP01 requires Internet reachability on port 80; HTTPS/WebSockets require a reachable TLS listener, normally port 443. Existing bare-metal/K3s clusters need a working exposure mechanism; a private LoadBalancer IP or a pending LoadBalancer does not establish public reachability.
 - Existing ingress choice, issuer, and ACME contact email. Recommend Traefik for a new ingress setup; use Istio when selected or already adopted by the team.
 - Whether application traffic stays private, selected HTTP services become public, or many HTTP services need wildcard routing. If unspecified, explain the private default before adding any public application routes.
-- Tenant namespace layout, optional namespace restriction via `tunnelsNamespace`, and an upstream service reachable from the machine where the client will run.
+- Intended tenant namespace scope and optional restriction via `tunnelsNamespace`. Creating tenant namespaces and choosing client/upstream placement belong to the tunnel workflow; they need not block control-plane installation.
 
 The client-router must be reachable by tunnel clients even when the tunneled applications are private. Public client connections do not imply public application access.
 
-When public ingress is unavailable, especially on a local Slicer VM or a cluster behind NAT, explicitly present both a **self-signed issuer for quick local testing/evaluation only** and a **public IP via `use-inlets-operator`**. Do this before attempting public HTTP01 issuance, unless the user has already selected a path. Also consider DNS01 with a user-controlled domain when clients already have a private network route. Read [references/private-cluster-evaluation.md](references/private-cluster-evaluation.md) for the choices, certificate trust setup, and operator skill link. A self-signed certificate or DNS01 solves certificate issuance, not network reachability; the local evaluation option is not a production setup.
+When public ingress is unavailable, explicitly present both a **self-signed issuer for quick local testing/evaluation only** and a **public IP via `use-inlets-operator`**. Do this before attempting public HTTP01 issuance, unless the user has already selected a path. Also consider DNS01 with a user-controlled domain when clients already have a private network route. Read [references/private-cluster-evaluation.md](references/private-cluster-evaluation.md) for the choices, certificate trust setup, and operator skill link. A self-signed certificate or DNS01 solves certificate issuance, not network reachability; the local evaluation option is not a production setup.
 
 | Choice | Application access | Additional setup |
 |---|---|---|
@@ -50,7 +52,7 @@ kubectl create secret generic inlets-uplink-license -n inlets \
   --from-file=license=./LICENSE_UPLINK
 ```
 
-Check for existing namespaces and Secrets before running create commands. Preserve existing license and API credentials unless replacement is part of the task. Keep credentials out of chart values, commits, and chat output.
+Check for existing namespaces and Secrets before running create commands. Preserve existing license and API credentials unless replacement is part of the task. Use restrictive permissions from creation (`umask 077`) for kubeconfigs, credential files, and generated connection instructions. Keep credentials out of chart values, commits, and chat output.
 
 ## Inspect, render, and install
 
@@ -71,7 +73,9 @@ helm template inlets-uplink oci://ghcr.io/openfaasltd/inlets-uplink-provider \
   --values ./values.yaml --include-crds
 ```
 
-Rendered output can contain a generated API token Secret; capture it privately and redact Secrets when reviewing. Verify ingress classes, issuer kinds/names/namespaces, TLS hosts, service ports, API routing, and that only requested application routes are public. Offline rendering cannot preserve a live token through Helm's `lookup`; do not apply the rendered bundle as a substitute for Helm installation.
+Rendered output can contain a generated API token Secret; capture it privately and exclude Secret documents with a YAML parser when reviewing. Grepping context around a Secret name can print its token. Verify ingress classes, issuer kinds/names/namespaces, TLS hosts, service ports, API routing, and that only requested application routes are public. Offline rendering cannot preserve a live token through Helm's `lookup`; do not apply the rendered bundle as a substitute for Helm installation.
+
+Chart 0.6.4 renders a `data-router` ClusterIP Service even with `dataRouter.enabled: false`. Judge private mode by the absence of its Deployment/endpoints and public routes, not by absence of the Service name. Do not delete chart-managed resources merely to remove this inert Service.
 
 ```bash
 helm upgrade --install inlets-uplink \
@@ -95,48 +99,20 @@ For Kubernetes Ingress inspect `ingress/client-router` and wait for `certificate
 
 The chart enables `clientApi` by default. Kubernetes Ingress normally routes `/v1` on the client-router hostname to `client-api:8080`. Verify this route explicitly for Istio; see the ingress reference. Helm generates the `client-api-token` Secret, key `client-api-token`, unless an existing/configured token is used. Retrieve it only into a protected local file when needed. This management token is separate from tunnel connection tokens and application authentication.
 
-For OIDC or a dedicated API hostname, follow the [API setup sections](https://docs.inlets.dev/uplink/installation/#setup-the-rest-api) and [REST API reference](https://docs.inlets.dev/uplink/rest-api/). Check the selected chart's `clientApi` values, DNS, TLS, and authentication. Verify an authenticated read operation; responses can include tunnel tokens, so redact them before sharing. A running Pod alone does not prove API access.
+Verify authenticated `GET /v1/tunnels` returns HTTP 200 and the same request without authentication returns 401 for the default static-token setup. `/v1/` is not a health endpoint; a 404 there does not diagnose API failure. Read [references/verification.md](references/verification.md) for protected API checks.
 
-## Connect and test the first tunnel
+For OIDC or a dedicated API hostname, follow the [API setup sections](https://docs.inlets.dev/uplink/installation/#setup-the-rest-api) and [REST API reference](https://docs.inlets.dev/uplink/rest-api/). Check the selected chart's `clientApi` values, DNS, TLS, and authentication. Responses can include tunnel tokens, so redact them before sharing. A running Pod alone does not prove API access.
 
-Follow [Create a tunnel](https://docs.inlets.dev/uplink/create-tunnels/) and [Connect the tunnel client](https://docs.inlets.dev/uplink/connect-tunnel-client/). Keep tenant tunnels out of the management namespace. For a new tenant namespace:
+## Hand off tunnel creation and client verification
 
-```bash
-kubectl create namespace tunnels
-kubectl label namespace tunnels inlets.dev/uplink=1
-kubectl create secret generic inlets-uplink-license -n tunnels \
-  --from-file=license=./LICENSE_UPLINK
-```
+For tunnel work, load [use-inlets-uplink](../use-inlets-uplink/SKILL.md); if it is not installed, consult the [upstream skill](https://github.com/inlets/agent-skills/blob/master/skills/use-inlets-uplink/SKILL.md). Pass the cluster/context, client-router hostname and reachable port, allowed tenant namespace scope, mesh injection requirements, selected application visibility, and public trust certificate file when using self-signed TLS. Keep the management API token separate from tunnel credentials.
 
-For the documented Istio sidecar setup also label the tenant namespace `istio-injection=enabled` before creating workloads. Respect an existing mesh revision/injection policy. Create a `Tunnel` with an automatically generated connection token:
+Continue through that skill when an end-to-end evaluation is part of the task. Its success criterion is a real response from the selected upstream through the tunnel, plus the public application hostname if requested. Coordinate any per-tunnel ingress with the public-tunnels reference here. Report control-plane readiness separately from tunnel verification; a setup-only request does not require creating a sample tunnel or installing a client.
 
-```yaml
-apiVersion: uplink.inlets.dev/v1alpha1
-kind: Tunnel
-metadata:
-  name: sample
-  namespace: tunnels
-spec:
-  licenseRef:
-    name: inlets-uplink-license
-    namespace: tunnels
-```
-
-Inspect `inlets-pro tunnel --help` and `inlets-pro tunnel connect --help`; install the plugin with `inlets-pro plugin get tunnel` if missing. Generate the connection instructions:
-
-```bash
-inlets-pro tunnel connect sample --namespace tunnels \
-  --domain uplink.example.com --upstream http://127.0.0.1:8080
-```
-
-The command contains a secret: capture it privately. Run the generated `inlets-pro uplink client` command on the host that can reach the upstream. Its URL identifies the control-plane domain and `/namespace/tunnel`. Never substitute a public application hostname for `--domain`. For persistence, inspect the plugin's `--format systemd` or `--format k8s_yaml` output before installing it on the intended client host/cluster.
-
-Verify the upstream locally, a successful client connection, and a real request from inside the Uplink cluster to `http://sample.tunnels:8000`. For host-mapped upstreams supply the corresponding Host header. For TCP, declare the selected ports in the Tunnel and test the actual protocol against its Service. See [private access](https://docs.inlets.dev/uplink/private-tunnels/).
-
-If public access was selected, complete the public-tunnels reference and test the public hostname too. Report the deployed release/version, context, domains, visibility, values location, credential file locations (no values), and successful checks. Distinguish a ready control plane from an unverified tunnel if client access or DNS is still unavailable.
+Report the deployed release/version, context, domains, visibility, values location, credential file locations (no values), and successful checks. Identify any remaining client/network test or local port-forward dependency.
 
 ## Troubleshooting and upgrades
 
-Use [Uplink troubleshooting](https://docs.inlets.dev/uplink/troubleshooting/) for observed failures. Check events and logs for `uplink-operator`, `client-router`, the tenant tunnel deployment, and `data-router` when enabled. Missing tunnel resources commonly require checking the namespace label, operator scope, local license Secret/reference, and license capacity. TLS failures require checking DNS, ACME challenges, solver class, and issuer namespace. Connection failures require checking the control-plane URL, token, WebSocket handling/timeouts, and client/server versions.
+Use [Uplink troubleshooting](https://docs.inlets.dev/uplink/troubleshooting/) for observed control-plane failures. Check events and logs for `uplink-operator`, `client-router`, and `data-router` when enabled. TLS failures require checking DNS, ACME challenges, solver class, and issuer namespace; ingress connection failures require checking WebSocket handling/timeouts. Use `use-inlets-uplink` for tenant resources, tunnel tokens, client versions, and upstream connectivity.
 
 For upgrades, preserve release values and token ownership, render the chosen version, and compare CRDs. Helm does not upgrade existing CRDs automatically; extract and review the CRD from that same chart version before applying a needed CRD update. Changes to `inletsVersion` can restart existing tunnel servers through the operator; account for that interruption. Keep an explicit ingress class on legacy installations so a chart default change does not switch their controller.

@@ -45,10 +45,15 @@ Example request:
 ```bash
 export TUNNEL_NS="tenant-name"
 export TUNNEL_NAME="customer-edge"
+umask 077
+CLIENT_API_RESPONSE_FILE="$(mktemp)"
 curl --fail-with-body \
   --header @"$CLIENT_API_HEADER_FILE" \
+  --output "$CLIENT_API_RESPONSE_FILE" --write-out '%{http_code}\n' \
   "$CLIENT_API/v1/tunnels/$TUNNEL_NAME?namespace=$TUNNEL_NS&metrics=1"
 ```
+
+Tunnel responses may contain connection tokens; keep the response file private, redact before reporting, and remove it after use. For a self-signed/private API certificate, add curl's `--cacert` with the administrator-provided public trust bundle. The runtime client's `--tls-ca` option does not configure curl.
 
 For OAuth client credentials, obtain the token from the configured identity provider; do not assume its token URL, scopes, or client authentication method. Confirm those with the Uplink administrator.
 

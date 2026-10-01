@@ -1,6 +1,6 @@
 # Private clusters and local evaluations
 
-Use this when the Uplink cluster lacks public ingress, including Kubernetes inside a local Slicer VM, a home lab, or a network behind NAT. Inspect reachability from the intended client host, not only from inside the VM. A populated Service `EXTERNAL-IP` may still be private, and a reachable Kubernetes API does not prove that ingress ports are reachable.
+Use this when the Uplink cluster lacks public ingress. Inspect reachability from the intended client host, not only from inside the cluster. A populated Service `EXTERNAL-IP` may still be private, and a reachable Kubernetes API does not prove that ingress ports are reachable.
 
 Present the applicable choices before installing a public ACME issuer. Reuse a choice already made by the user.
 
@@ -15,6 +15,8 @@ Always include the first two options in this scenario, identifying the self-sign
 ## Self-signed evaluation
 
 Use cert-manager's [SelfSigned issuer](https://cert-manager.io/docs/configuration/selfsigned/) for this temporary setup. Create an Issuer in `inlets` for Kubernetes Ingress:
+
+If no hostname was specified, propose `uplink.test` with local resolution as the evaluation default while collecting the other missing choices. Preserve a hostname the user has already chosen. This mode does not need a purchased domain or public DNS; do not leave it blocked on those requirements.
 
 ```yaml
 apiVersion: cert-manager.io/v1
@@ -40,25 +42,17 @@ dataRouter:
   enabled: false
 ```
 
-For Istio, create the Issuer in the same namespace as the chart's Certificate, normally `istio-system`, and retain the Istio settings from the ingress reference. For a separate API hostname, configure its issuer reference and hostname too. Render to ensure no production ACME Issuer is created and the certificate request references the evaluation Issuer.
+For Kubernetes Ingress, create only the Issuer: the chart's annotated Ingress triggers cert-manager to create `client-router-cert` after Helm installation, as described in [ingress.md](ingress.md#who-creates-the-certificate). Do not wait for that Certificate before the Ingress exists. For Istio, create the Issuer in the same namespace as the chart's explicit Certificate, normally `istio-system`, and retain the Istio settings from the ingress reference. For a separate API hostname, configure its issuer reference and hostname too. Render to ensure no production ACME Issuer is created and the Ingress annotation or explicit Certificate references the evaluation Issuer.
 
-Make `uplink.test` resolve to an ingress address reachable by each intended client. Use scoped local DNS/hosts entries for this reserved test domain, without replacing unrelated entries. If the Slicer VM's ingress is not directly reachable from the client host, forward the ingress controller's Service TLS port through the kube API, for example local port 8443 to Service port 443. Discover the actual Service name/namespace and use a loopback-bound `kubectl port-forward` on the host running the test client. Map `uplink.test` to loopback there and use `wss://uplink.test:8443/...`. Keep the forward running during testing. Forward the ingress controller, so TLS termination and hostname routing are exercised.
+Make `uplink.test` resolve to an ingress address reachable by each intended client. Use scoped local DNS/hosts entries for this reserved test domain, without replacing unrelated entries. If the cluster ingress is not directly reachable from the client host, forward the ingress controller's Service TLS port through the kube API, for example local port 8443 to Service port 443. Discover the actual Service name/namespace and use a loopback-bound `kubectl port-forward` on the host running the test client. Map `uplink.test` to loopback there and use `wss://uplink.test:8443/...`. Keep the forward running during testing. Forward the ingress controller, so TLS termination and hostname routing are exercised.
 
 After issuance, export only the public certificate (`tls.crt`) from `client-router-cert` to a local PEM file, using the certificate's actual namespace. Never export `tls.key`. Transfer that certificate through the trusted administrative connection to the test client host.
 
-Check `inlets-pro uplink client --help` for `--tls-ca` and add it to the generated client command, preserving the actual tunnel token, namespace, tunnel name, and upstream. For the example forwarded endpoint:
+Use `curl --cacert ./uplink-eval-cert.pem` for HTTPS/API checks. The URL hostname must match the certificate's DNS names. Prefer trust scoped to the test command over modifying the machine-wide trust store. Keep API authentication enabled.
 
-```bash
-inlets-pro uplink client \
-  --url wss://uplink.test:8443/tunnels/sample \
-  --token-file ./sample-token.txt \
-  --tls-ca ./uplink-eval-cert.pem \
-  --upstream http://127.0.0.1:8080
-```
+Hand off client setup to [use-inlets-uplink](../../use-inlets-uplink/SKILL.md), supplying the reachable hostname/port and public certificate file. That skill adds the optional `--tls-ca` flag for this self-signed setup before the first connection.
 
-Use `curl --cacert ./uplink-eval-cert.pem` for HTTPS/API checks. The URL hostname must match the certificate's DNS names. Prefer trust scoped to the test command over modifying the machine-wide trust store. If the installed client lacks the trust flag, select a compatible client version rather than inventing an insecure flag. Keep tunnel/API authentication enabled.
-
-Verify Certificate readiness, the client's TLS connection, and a real upstream request through the tunnel. State that this validates a local evaluation, not public reachability or production readiness. Record any port-forward dependency and local hostname entry. A reissued self-signed certificate may require updating the trusted PEM. For production, move to a suitable managed/public issuer or the organisation's managed PKI and verify the intended network path again.
+Verify Certificate readiness, trusted HTTPS, and API authentication. Report this as a local evaluation, not public reachability or production readiness; report any separate tunnel test performed through `use-inlets-uplink`. Record any port-forward dependency and local hostname entry. A reissued self-signed certificate may require updating the trusted PEM. For production, move to a suitable managed/public issuer or the organisation's managed PKI and verify the intended network path again.
 
 ## Public IP through the inlets operator
 

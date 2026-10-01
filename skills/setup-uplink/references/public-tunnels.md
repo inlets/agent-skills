@@ -2,6 +2,8 @@
 
 Source: [Expose tunnels publicly](https://docs.inlets.dev/uplink/expose-tunnels/). Apply this only for selected services the user wants public. Preserve private tunnels and establish a working private connection before diagnosing public routing.
 
+This reference configures the ingress infrastructure. Use [use-inlets-uplink](../../use-inlets-uplink/SKILL.md) to create/connect the target tunnels and return their actual Service names, namespaces, ports, and host mappings before applying per-tunnel routes.
+
 These paths expose HTTP applications with HTTPS at the ingress. They do not provide arbitrary TCP forwarding or TLS passthrough to a remote ingress. Tunnel connection tokens and management API tokens do not authenticate visitors to public applications; configure the intended application/ingress authentication separately.
 
 ## Per-tunnel Kubernetes Ingress
@@ -69,23 +71,7 @@ Do not include `*.` in `wildcardDomain`. The chart creates a wildcard Ingress an
 
 For **Istio**, enable `dataRouter.enabled` but leave `dataRouter.tls.ingress.enabled: false`. Chart 0.6.4 has no data-router Istio Gateway template or `dataRouter.tls.istio.enabled` option. Create a DNS01 Issuer and wildcard Certificate in the gateway workload namespace, then an Istio Gateway/VirtualService for `*.apps.example.com` routing to `data-router.inlets.svc.cluster.local:8080`. Reference the wildcard TLS Secret with `credentialName`. Keep these declarative resources alongside the Helm values.
 
-4. Register the full hostname on each selected Tunnel; merge into its existing spec without dropping ports, token references, or other settings:
-
-```yaml
-spec:
-  ingressDomains:
-    - app.apps.example.com
-```
-
-5. Generate the client command using the **control-plane** hostname and map the public hostname to the private upstream:
-
-```bash
-inlets-pro tunnel connect sample --namespace tunnels \
-  --domain uplink.example.com \
-  --upstream app.apps.example.com=http://127.0.0.1:8080
-```
-
-Run its generated client on the upstream network. Adding wildcard DNS alone does not register a tunnel; `spec.ingressDomains`, the requested Host, and the client upstream mapping must agree. Do not register private tunnels for public access.
+4. Hand the wildcard suffix and chosen public hostnames to `use-inlets-uplink` for tunnel domain registration and matching client upstreams. Adding wildcard DNS alone does not register a tunnel: `spec.ingressDomains`, the requested Host, and the client upstream mapping must agree. Keep the client connection hostname distinct from these application domains, and do not register private tunnels for public access.
 
 ## Verify the selected exposure
 

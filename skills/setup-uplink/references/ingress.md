@@ -41,6 +41,10 @@ For another controller set `ingress.class` to its actual IngressClass. Check the
 
 For an existing or staging issuer set `ingress.issuer.enabled: false` and `clientRouter.tls.issuerName` to its name. Verify the rendered reference kind: chart 0.6.4 uses a namespaced `Issuer`, so that issuer belongs in `inlets`. A `ClusterIssuer` with the same name is not interchangeable; use a supported chart option or explicitly managed ingress/certificate resources if needed. Staging certificates are not publicly trusted.
 
+### Who creates the Certificate?
+
+For Kubernetes Ingress, the chart renders `cert-manager.io/issuer` plus `spec.tls.hosts` and `secretName: client-router-cert`. cert-manager's [ingress-shim](https://cert-manager.io/docs/usage/ingress/) creates the corresponding Certificate after the Ingress is applied, including for a SelfSigned Issuer. No Helm Certificate template is needed for this path. Create the Issuer, install the chart, then wait for the Certificate; do not create a competing Certificate just because `helm template` contains none. If issuance fails, inspect the Ingress annotation/TLS stanza, issuer readiness, cert-manager events, and CertificateRequest. The Istio path differs: its chart template explicitly creates a Certificate.
+
 ### Existing ingress-nginx installations
 
 The [installation docs](https://docs.inlets.dev/uplink/installation/#ingress-nginx) identify community ingress-nginx as retired and the chart's default as Traefik starting in 0.5.0. Prefer supported controllers for new installations. Preserve a user's explicitly selected legacy controller during an Uplink upgrade; migration is a separate change.
