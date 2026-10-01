@@ -6,7 +6,7 @@ Present the applicable choices before installing a public ACME issuer. Reuse a c
 
 | Option | Suitable use | Requirements |
 |---|---|---|
-| Self-signed issuer | Quick initial testing/evaluation; not production | Private route or local port-forward, test hostname, explicit client certificate trust |
+| Self-signed issuer | Local testing and evaluation; not production guidance | Private route or local port-forward, test hostname, explicit client certificate trust |
 | Public IP with `use-inlets-operator` | Test real Internet ingress or provide public client connectivity | Cloud VM/provider credentials, Inlets Pro license, DNS, and public ports 80/443 |
 | DNS01 with a real domain | Trusted certificates while ingress stays private | Domain/DNS control, DNS01 issuer, and an existing private route for clients |
 
@@ -14,9 +14,11 @@ Always include the first two options in this scenario, identifying the self-sign
 
 ## Self-signed evaluation
 
-Use cert-manager's [SelfSigned issuer](https://cert-manager.io/docs/configuration/selfsigned/) for this temporary setup. Create an Issuer in `inlets` for Kubernetes Ingress:
+If no router hostname was specified, **ask the user to confirm a suggested hostname or provide their own** before writing the values or issuing the certificate. Suggest [nip.io](https://nip.io/) using the ingress IP reachable from the intended client, for example `uplink.192.168.1.50.nip.io` for `192.168.1.50`. It resolves the embedded IP without user-managed DNS records or `/etc/hosts` changes. Use the discovered address, not this example IP, and preserve an already chosen hostname such as `uplink.internal`.
 
-If no hostname was specified, propose `uplink.test` with local resolution as the evaluation default while collecting the other missing choices. Preserve a hostname the user has already chosen. This mode does not need a purchased domain or public DNS; do not leave it blocked on those requirements.
+For a loopback-bound port-forward, suggest `uplink.127.0.0.1.nip.io` instead; it works only on the host running that forward. Check resolution through the intended client's resolver: public DNS access is required, and DNS-rebinding protection may block private/loopback answers. If unavailable or unwanted, offer a user-managed hostname or `uplink.test` with scoped local DNS/hosts configuration; do not disable resolver protections. `nip.io` supplies DNS only, not a network route or trusted TLS. Keep the self-signed issuer and explicit certificate trust for this mode.
+
+Use cert-manager's [SelfSigned issuer](https://cert-manager.io/docs/configuration/selfsigned/) for this local evaluation setup. This configuration is not intended as production guidance. Create an Issuer in `inlets` for Kubernetes Ingress:
 
 ```yaml
 apiVersion: cert-manager.io/v1
@@ -28,14 +30,14 @@ spec:
   selfSigned: {}
 ```
 
-Merge this override into the chosen ingress values; retain the controller-specific configuration:
+Merge this override into the chosen ingress values; replace the example domain with the confirmed hostname and retain the controller-specific configuration:
 
 ```yaml
 ingress:
   issuer:
     enabled: false
 clientRouter:
-  domain: uplink.test
+  domain: uplink.192.168.1.50.nip.io
   tls:
     issuerName: uplink-eval-selfsigned
 dataRouter:
@@ -44,7 +46,7 @@ dataRouter:
 
 For Kubernetes Ingress, create only the Issuer: the chart's annotated Ingress triggers cert-manager to create `client-router-cert` after Helm installation, as described in [ingress.md](ingress.md#who-creates-the-certificate). Do not wait for that Certificate before the Ingress exists. For Istio, create the Issuer in the same namespace as the chart's explicit Certificate, normally `istio-system`, and retain the Istio settings from the ingress reference. For a separate API hostname, configure its issuer reference and hostname too. Render to ensure no production ACME Issuer is created and the Ingress annotation or explicit Certificate references the evaluation Issuer.
 
-Make `uplink.test` resolve to an ingress address reachable by each intended client. Use scoped local DNS/hosts entries for this reserved test domain, without replacing unrelated entries. If the cluster ingress is not directly reachable from the client host, forward the ingress controller's Service TLS port through the kube API, for example local port 8443 to Service port 443. Discover the actual Service name/namespace and use a loopback-bound `kubectl port-forward` on the host running the test client. Map `uplink.test` to loopback there and use `wss://uplink.test:8443/...`. Keep the forward running during testing. Forward the ingress controller, so TLS termination and hostname routing are exercised.
+Verify the confirmed hostname resolves to an ingress address reachable by each intended client, and use it consistently in values, certificate DNS names, and connection URLs. If the cluster ingress is not directly reachable from the client host, forward the ingress controller's Service TLS port through the kube API, for example local port 8443 to Service port 443. Discover the actual Service name/namespace and use a loopback-bound `kubectl port-forward` on the host running the test client. With the loopback hostname confirmed above, the endpoint is `wss://uplink.127.0.0.1.nip.io:8443/...`. Keep the forward running during testing. Forward the ingress controller, so TLS termination and hostname routing are exercised.
 
 After issuance, export only the public certificate (`tls.crt`) from `client-router-cert` to a local PEM file, using the certificate's actual namespace. Never export `tls.key`. Transfer that certificate through the trusted administrative connection to the test client host.
 
