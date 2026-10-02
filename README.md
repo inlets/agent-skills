@@ -34,6 +34,25 @@ cp -r agent-skills/skills/* .agents/skills/    # Amp / Codex
 cp -r agent-skills/skills/* .cursor/skills/    # Cursor
 ```
 
+## All-in-one Uplink installation
+
+Use `setup-uplink` to install the control plane, configure TLS, and verify the management API on an existing cluster. Example prompt:
+
+```text
+Set up Inlets Uplink on the Kubernetes cluster <cluster-name>.
+Use the setup-uplink skill and the kubeconfig for that cluster. Create
+values.yaml in the current working directory. Use self-signed certificates
+and keep tunneled applications private. The Uplink license is available
+at ~/.inlets/LICENSE_UPLINK.
+```
+
+Results of private Uplink setup with self-signed TLS using **OpenCode**:
+
+| Model | Average setup time |
+|---|---:|
+| GPT-5.6 Luna (low reasoning) | 4m 14s |
+| Qwen 3.8 27B | 3m 36s |
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
