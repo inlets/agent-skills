@@ -105,7 +105,7 @@ For OIDC or a dedicated API hostname, follow the [API setup sections](https://do
 
 ## Hand off tunnel creation and client verification
 
-For tunnel work, load [use-inlets-uplink](../use-inlets-uplink/SKILL.md); if it is not installed, consult the [upstream skill](https://github.com/inlets/agent-skills/blob/master/skills/use-inlets-uplink/SKILL.md). Pass the cluster/context, client-router hostname and reachable port, allowed tenant namespace scope, mesh injection requirements, selected application visibility, and public trust certificate file when using self-signed TLS. Keep the management API token separate from tunnel credentials.
+For tunnel work, load `use-inlets-uplink`. If a companion skill required for the selected workflow is unavailable, report the missing skill so the user can install it. Pass the cluster/context, client-router hostname and reachable port, allowed tenant namespace scope, mesh injection requirements, selected application visibility, and public trust certificate file when using self-signed TLS. Keep the management API token separate from tunnel credentials.
 
 Continue through that skill when an end-to-end evaluation is part of the task. Its success criterion is a real response from the selected upstream through the tunnel, plus the public application hostname if requested. Coordinate any per-tunnel ingress with the public-tunnels reference here. Report control-plane readiness separately from tunnel verification; a setup-only request does not require creating a sample tunnel or installing a client.
 

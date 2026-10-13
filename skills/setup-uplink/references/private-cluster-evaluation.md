@@ -99,7 +99,7 @@ openssl x509 -in ./uplink-ca.pem -noout -subject -issuer -ext basicConstraints
 
 Confirm a non-empty subject/issuer and `CA:TRUE`. Transfer this public CA through the trusted administrative connection to the test client host. Use `curl --cacert ./uplink-ca.pem` for HTTPS/API checks. The URL hostname must match the router certificate's DNS names. Prefer trust scoped to the test command over modifying the machine-wide trust store. Keep API authentication enabled and follow [verification.md](verification.md) to check authenticated HTTP 200 and unauthenticated HTTP 401. A successful Go client connection alone does not verify curl/OpenSSL compatibility.
 
-Hand off client setup to [use-inlets-uplink](../../use-inlets-uplink/SKILL.md), supplying the reachable hostname/port and `uplink-ca.pem`. That skill adds the optional `--tls-ca` flag before the first connection. When testing the full evaluation path, verify a real upstream response through the tunnel as well as the API checks.
+For client setup, load `use-inlets-uplink`. Supply the reachable hostname/port and `uplink-ca.pem`. That skill adds the optional `--tls-ca` flag before the first connection. When testing the full evaluation path, verify a real upstream response through the tunnel as well as the API checks.
 
 For an installation made with the old direct-SelfSigned recipe, add the root/CA Issuer, update the preserved Helm values to `issuerName: uplink-ca`, and upgrade the release. Confirm `client-router-cert.spec.issuerRef.name` has changed and the newly served certificate verifies against the root; an old Ready condition alone is insufficient during reconciliation. Replace the old leaf PEM on every test client with the new CA PEM. Do not delete the license, API token, or TLS Secret to force migration.
 
@@ -107,7 +107,7 @@ Report this as a local evaluation, not public reachability or production readine
 
 ## Public IP through the inlets operator
 
-Offer the companion [use-inlets-operator skill](https://github.com/inlets/agent-skills/blob/master/skills/use-inlets-operator/SKILL.md). If installed, load it before carrying out that option; otherwise use its linked instructions and the [operator documentation](https://docs.inlets.dev/reference/inlets-operator/). It is optional for Uplink and is distinct from Uplink's own `uplink-operator` component.
+Offer the companion `use-inlets-operator` skill and load it before carrying out that option. See the [operator documentation](https://docs.inlets.dev/reference/inlets-operator/) for product details. It is optional for Uplink and is distinct from Uplink's own `uplink-operator` component.
 
 Use it to expose the existing ingress controller's LoadBalancer Service on ports 80/443 via a cloud exit VM. Keep TLS termination at the cluster ingress. Explain the cloud VM cost and separate Inlets Pro credential/license requirements before provisioning; an Uplink license is not a substitute. Selecting a local evaluation does not authorize provisioning public infrastructure.
 
