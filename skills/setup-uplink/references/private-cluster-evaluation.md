@@ -18,16 +18,55 @@ If no router hostname was specified, **ask the user to confirm a suggested hostn
 
 For a loopback-bound port-forward, suggest `uplink.127.0.0.1.nip.io` instead; it works only on the host running that forward. Check resolution through the intended client's resolver: public DNS access is required, and DNS-rebinding protection may block private/loopback answers. If unavailable or unwanted, offer a user-managed hostname or `uplink.test` with scoped local DNS/hosts configuration; do not disable resolver protections. `nip.io` supplies DNS only, not a network route or trusted TLS. Keep the self-signed issuer and explicit certificate trust for this mode.
 
-Use cert-manager's [SelfSigned issuer](https://cert-manager.io/docs/configuration/selfsigned/) for this local evaluation setup. This configuration is not intended as production guidance. Create an Issuer in `inlets` for Kubernetes Ingress:
+Use cert-manager's [CA bootstrap pattern](https://cert-manager.io/docs/configuration/selfsigned/#bootstrapping-ca-issuers): a SelfSigned Issuer creates a named root CA, and a CA Issuer signs the router certificate. This configuration is for local evaluation only. A directly self-signed ingress certificate with only `dnsNames` has an empty subject and issuer; curl/OpenSSL can reject it with `SSL: couldn't get X509-issuer name!` even when the exported PEM matches the served certificate and the Go tunnel client accepts it.
+
+These examples use Kubernetes Ingress in `inlets`. For an Istio evaluation, replace `inlets` in all manifest namespaces and apply, wait, and export commands with the router Certificate's namespace, normally `istio-system`.
+
+After cert-manager is ready and the selected namespace exists, save this as `uplink-ca.yaml`:
 
 ```yaml
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: uplink-eval-selfsigned
+  name: uplink-selfsigned
   namespace: inlets
 spec:
   selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: uplink-root-ca
+  namespace: inlets
+spec:
+  isCA: true
+  commonName: uplink-root-ca
+  secretName: uplink-root-ca
+  duration: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: uplink-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: uplink-ca
+  namespace: inlets
+spec:
+  ca:
+    secretName: uplink-root-ca
+```
+
+Apply the bootstrap resources and wait for the root and signing Issuer before installing Uplink (adapt the namespace for Istio):
+
+```bash
+kubectl apply -f ./uplink-ca.yaml
+kubectl wait -n inlets --for=condition=Ready certificate/uplink-root-ca --timeout=120s
+kubectl wait -n inlets --for=condition=Ready issuer/uplink-ca --timeout=120s
 ```
 
 Merge this override into the chosen ingress values; replace the example domain with the confirmed hostname and retain the controller-specific configuration:
@@ -39,22 +78,32 @@ ingress:
 clientRouter:
   domain: uplink.192.168.1.50.nip.io
   tls:
-    issuerName: uplink-eval-selfsigned
+    issuerName: uplink-ca
 dataRouter:
   enabled: false
 ```
 
-For Kubernetes Ingress, create only the Issuer: the chart's annotated Ingress triggers cert-manager to create `client-router-cert` after Helm installation, as described in [ingress.md](ingress.md#who-creates-the-certificate). Do not wait for that Certificate before the Ingress exists. For Istio, create the Issuer in the same namespace as the chart's explicit Certificate, normally `istio-system`, and retain the Istio settings from the ingress reference. For a separate API hostname, configure its issuer reference and hostname too. Render to ensure no production ACME Issuer is created and the Ingress annotation or explicit Certificate references the evaluation Issuer.
+For Kubernetes Ingress, create the bootstrap resources above but no router Certificate: the chart's annotated Ingress triggers cert-manager to create `client-router-cert` after Helm installation, as described in [ingress.md](ingress.md#who-creates-the-certificate). Do not wait for that router Certificate before the Ingress exists. For Istio, retain the settings from the ingress reference; its chart explicitly creates the router Certificate. For a separate API hostname, configure its issuer reference and hostname too. Render to ensure no production ACME Issuer is created and the Ingress annotation or explicit Certificate references `uplink-ca`, not the bootstrap SelfSigned Issuer.
 
 Verify the confirmed hostname resolves to an ingress address reachable by each intended client, and use it consistently in values, certificate DNS names, and connection URLs. If the cluster ingress is not directly reachable from the client host, forward the ingress controller's Service TLS port through the kube API, for example local port 8443 to Service port 443. Discover the actual Service name/namespace and use a loopback-bound `kubectl port-forward` on the host running the test client. With the loopback hostname confirmed above, the endpoint is `wss://uplink.127.0.0.1.nip.io:8443/...`. Keep the forward running during testing. Forward the ingress controller, so TLS termination and hostname routing are exercised.
 
-After issuance, export only the public certificate (`tls.crt`) from `client-router-cert` to a local PEM file, using the certificate's actual namespace. Never export `tls.key`. Transfer that certificate through the trusted administrative connection to the test client host.
+After Helm installation, wait for the router Certificate and export the public **root CA**, not the router leaf. Here `tls.crt` comes from the **root CA Secret**; it is the self-signed trust anchor. Never export either Secret's `tls.key`. Use the actual certificate namespace:
 
-Use `curl --cacert ./uplink-eval-cert.pem` for HTTPS/API checks. The URL hostname must match the certificate's DNS names. Prefer trust scoped to the test command over modifying the machine-wide trust store. Keep API authentication enabled.
+```bash
+kubectl wait -n inlets --for=condition=Ready certificate/client-router-cert --timeout=120s
+umask 077
+kubectl get secret uplink-root-ca -n inlets \
+  -o jsonpath='{.data.tls\.crt}' | base64 --decode > ./uplink-ca.pem
+openssl x509 -in ./uplink-ca.pem -noout -subject -issuer -ext basicConstraints
+```
 
-Hand off client setup to [use-inlets-uplink](../../use-inlets-uplink/SKILL.md), supplying the reachable hostname/port and public certificate file. That skill adds the optional `--tls-ca` flag for this self-signed setup before the first connection.
+Confirm a non-empty subject/issuer and `CA:TRUE`. Transfer this public CA through the trusted administrative connection to the test client host. Use `curl --cacert ./uplink-ca.pem` for HTTPS/API checks. The URL hostname must match the router certificate's DNS names. Prefer trust scoped to the test command over modifying the machine-wide trust store. Keep API authentication enabled and follow [verification.md](verification.md) to check authenticated HTTP 200 and unauthenticated HTTP 401. A successful Go client connection alone does not verify curl/OpenSSL compatibility.
 
-Verify Certificate readiness, trusted HTTPS, and API authentication. Report this as a local evaluation, not public reachability or production readiness; report any separate tunnel test performed through `use-inlets-uplink`. Record any port-forward dependency and local hostname entry. A reissued self-signed certificate may require updating the trusted PEM. For production, move to a suitable managed/public issuer or the organisation's managed PKI and verify the intended network path again.
+Hand off client setup to [use-inlets-uplink](../../use-inlets-uplink/SKILL.md), supplying the reachable hostname/port and `uplink-ca.pem`. That skill adds the optional `--tls-ca` flag before the first connection. When testing the full evaluation path, verify a real upstream response through the tunnel as well as the API checks.
+
+For an installation made with the old direct-SelfSigned recipe, add the root/CA Issuer, update the preserved Helm values to `issuerName: uplink-ca`, and upgrade the release. Confirm `client-router-cert.spec.issuerRef.name` has changed and the newly served certificate verifies against the root; an old Ready condition alone is insufficient during reconciliation. Replace the old leaf PEM on every test client with the new CA PEM. Do not delete the license, API token, or TLS Secret to force migration.
+
+Report this as a local evaluation, not public reachability or production readiness; report any separate tunnel test performed through `use-inlets-uplink`. Record any port-forward dependency and local hostname entry. Leaf renewal under the same root does not require changing client trust; root renewal/replacement does require redistributing the CA and reissuing leaf certificates as needed. Keep the evaluation within the root's validity period. For production, move to a suitable managed/public issuer or the organisation's managed PKI and verify the intended network path again.
 
 ## Public IP through the inlets operator
 
