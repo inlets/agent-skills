@@ -18,4 +18,4 @@ curl --silent --show-error --connect-timeout 5 --max-time 20 \
   "$UPLINK_API_URL/v1/tunnels"
 ```
 
-Add `--cacert ./uplink-eval-cert.pem` for a self-signed evaluation. `--resolve hostname:443:reachable-ip` can test the correct TLS hostname before local DNS is configured; it does not change DNS for the tunnel client. Run the same request without the header file to test rejection.
+Add `--cacert ./uplink-ca.pem` for a self-signed evaluation, using the root CA exported in [private-cluster-evaluation.md](private-cluster-evaluation.md), not the router leaf certificate. `--resolve hostname:443:reachable-ip` can test the correct TLS hostname before local DNS is configured; it does not change DNS for the tunnel client. Run the same request without the header file to test rejection.
