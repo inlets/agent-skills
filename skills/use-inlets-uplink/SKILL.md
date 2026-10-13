@@ -7,7 +7,7 @@ description: Creates, connects, inspects, updates, and removes Inlets Uplink tun
 
 Manage private customer endpoints from an Inlets Uplink control plane. Prefer the interface the user already operates: CRDs for GitOps, the CLI for interactive work, and REST for application integration.
 
-For control-plane installation, ingress, and certificate issuance, use [setup-uplink](../setup-uplink/SKILL.md), or its [upstream copy](https://github.com/inlets/agent-skills/blob/master/skills/setup-uplink/SKILL.md) if not installed. When continuing from that skill, reuse the supplied hostname/port, tenant scope, mesh injection policy, visibility, and any public CA/certificate file.
+For control-plane installation, ingress, and certificate issuance, load `setup-uplink`. If it is needed but unavailable, report the missing skill so the user can install it. When continuing from that skill, reuse the supplied hostname/port, tenant scope, mesh injection policy, visibility, and any public CA/certificate file.
 
 Docs: https://docs.inlets.dev/uplink/
 

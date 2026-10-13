@@ -2,7 +2,7 @@
 
 Source: [Expose tunnels publicly](https://docs.inlets.dev/uplink/expose-tunnels/). Apply this only for selected services the user wants public. Preserve private tunnels and establish a working private connection before diagnosing public routing.
 
-This reference configures the ingress infrastructure. Use [use-inlets-uplink](../../use-inlets-uplink/SKILL.md) to create/connect the target tunnels and return their actual Service names, namespaces, ports, and host mappings before applying per-tunnel routes.
+This reference configures the ingress infrastructure. Load `use-inlets-uplink` to create/connect the target tunnels and return their actual Service names, namespaces, ports, and host mappings before applying per-tunnel routes.
 
 These paths expose HTTP applications with HTTPS at the ingress. They do not provide arbitrary TCP forwarding or TLS passthrough to a remote ingress. Tunnel connection tokens and management API tokens do not authenticate visitors to public applications; configure the intended application/ingress authentication separately.
 
